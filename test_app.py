@@ -136,7 +136,6 @@ class FlaskTestCase(unittest.TestCase):
         self.assertEqual(users, {})
 
     def test_add_user(self):
-        # Тестируем функцию add_user напрямую
         add_user('direct_test', 'direct_password')
         users = read_users()
         self.assertEqual(users['direct_test'], 'direct_password')

@@ -2,13 +2,12 @@ import os
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)  # Секретный ключ для сессий
+app.secret_key = os.urandom(24)
 app.config['USERS_FILE'] = 'users.txt'
-app.config['PASSWORD_MIN_LENGTH'] = 6  # Минимум 6 символов
+app.config['PASSWORD_MIN_LENGTH'] = 6
 
 
 def read_users():
-    """Чтение пользователей из файла"""
     users = {}
     try:
         with open(app.config['USERS_FILE'], 'r', encoding='utf-8') as file:
@@ -26,7 +25,6 @@ def read_users():
 
 
 def add_user(username, password):
-    """Добавление пользователя с открытым паролем"""
     if len(password) <= app.config['PASSWORD_MIN_LENGTH']:
         raise ValueError(f"Пароль должен содержать более {app.config['PASSWORD_MIN_LENGTH']} символов")
 
@@ -115,7 +113,6 @@ def logout():
 
 
 if __name__ == '__main__':
-    # Создаем файл users.txt если его нет
     if not os.path.exists(app.config['USERS_FILE']):
         open(app.config['USERS_FILE'], 'w').close()
     app.run(debug=True)
