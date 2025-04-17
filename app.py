@@ -1,79 +1,121 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+import os
+from flask import Flask, render_template, request, redirect, url_for, session, flash
 
-app = Flask(__name__)                             # Создание экземпляра Flask-приложения
-app.secret_key = 'secret_key'                     # Установка секретного ключа для подписи сессий
-app.config['USERS_FILE'] = 'users.txt'            # Настройка пути к файлу с пользователями
+app = Flask(__name__)
+app.secret_key = os.urandom(24)  # Секретный ключ для сессий
+app.config['USERS_FILE'] = 'users.txt'
+app.config['PASSWORD_MIN_LENGTH'] = 6  # Минимум 6 символов
 
-def read_users():                                 # Функция для чтения пользователей из файла
-    users = {}                                    # Создание пустого словаря для пользователей
+
+def read_users():
+    """Чтение пользователей из файла"""
+    users = {}
     try:
-        with open(app.config['USERS_FILE'], 'r') as file:  # Открытие файла для чтения
-            for line in file:                     # Чтение файла построчно
-                username, password = line.strip().split(':')  # Разделение строки на логин и пароль
-                users[username] = password        # Добавление пары в словарь
-    except FileNotFoundError:                     # Обработка отсутствия файла
-        pass                                      # Пропуск ошибки
-    return users                                  # Возврат словаря пользователей
+        with open(app.config['USERS_FILE'], 'r', encoding='utf-8') as file:
+            for line in file:
+                line = line.strip()
+                if line:
+                    try:
+                        username, password = line.split(':', 1)
+                        users[username] = password
+                    except ValueError:
+                        continue
+    except FileNotFoundError:
+        pass
+    return users
 
-def add_user(username, password):                 # Функция добавления нового пользователя
-    with open(app.config['USERS_FILE'], 'a') as file:  # Открытие файла для дозаписи
-        file.write(f"{username}:{password}\n")    # Запись данных пользователя
 
-@app.route('/')                                   # Декоратор маршрута для главной страницы
-def home():                                       # Функция обработки главной страницы
-    if 'username' in session:                     # Проверка авторизации пользователя
-        return redirect(url_for('welcome'))       # Перенаправление авторизованного пользователя
-    return redirect(url_for('login'))             # Перенаправление неавторизованного пользователя
+def add_user(username, password):
+    """Добавление пользователя с открытым паролем"""
+    if len(password) <= app.config['PASSWORD_MIN_LENGTH']:
+        raise ValueError(f"Пароль должен содержать более {app.config['PASSWORD_MIN_LENGTH']} символов")
 
-@app.route('/login', methods=['GET', 'POST'])     # Маршрут для страницы входа
-def login():                                      # Функция обработки входа
-    if request.method == 'POST':                  # Обработка POST-запроса (отправка формы)
-        username = request.form.get('username')   # Получение логина из формы
-        password = request.form.get('password')   # Получение пароля из формы
-        users = read_users()                      # Загрузка списка пользователей
+    with open(app.config['USERS_FILE'], 'a', encoding='utf-8') as file:
+        file.write(f"{username}:{password}\n")
 
-        if username in users and users[username] == password:  # Проверка учетных данных
-            session['username'] = username        # Сохранение логина в сессии
-            return redirect(url_for('welcome'))   # Перенаправление при успешном входе
-        else:
-            return render_template('login.html',   # Возврат формы с ошибкой
-                                error="Неверный логин или пароль")
-    return render_template('login.html')          # Отображение формы входа (GET-запрос)
 
-@app.route('/register', methods=['GET', 'POST'])  # Маршрут для страницы регистрации
-def register():                                   # Функция обработки регистрации
-    if request.method == 'POST':                  # Обработка POST-запроса
-        username = request.form.get('username')   # Получение данных из формы
-        password = request.form.get('password')
-        confirm_password = request.form.get('confirm_password')
-        users = read_users()                      # Загрузка списка пользователей
+@app.route('/')
+def home():
+    if 'username' in session:
+        return redirect(url_for('welcome'))
+    return redirect(url_for('login'))
 
-        if not username or not password or not confirm_password:  # Проверка заполнения полей
-            return render_template('register.html',
-                                error="Все поля обязательны для заполнения")
-        if password != confirm_password:         # Проверка совпадения паролей
-            return render_template('register.html',
-                                error="Пароли не совпадают")
-        if username in users:                    # Проверка существования пользователя
-            return render_template('register.html',
-                                error="Пользователь уже существует")
 
-        add_user(username, password)             # Добавление нового пользователя
-        session['username'] = username           # Сохранение в сессии
-        return redirect(url_for('welcome'))      # Перенаправление после регистрации
-    return render_template('register.html')      # Отображение формы регистрации (GET)
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        users = read_users()
 
-@app.route('/welcome')                           # Маршрут для защищенной страницы
-def welcome():                                   # Функция приветствия
-    if 'username' not in session:                # Проверка авторизации
-        return redirect(url_for('login'))        # Перенаправление если не авторизован
-    return render_template('welcome.html',      # Отображение страницы приветствия
-                         username=session['username'])
+        if not username or not password:
+            flash('Все поля обязательны для заполнения', 'error')
+            return render_template('login.html')
 
-@app.route('/logout')                            # Маршрут для выхода из системы
-def logout():                                    # Функция выхода
-    session.pop('username', None)                # Удаление данных пользователя из сессии
-    return redirect(url_for('login'))            # Перенаправление на страницу входа
+        if username not in users:
+            flash('Неверный логин или пароль', 'error')
+            return render_template('login.html')
+
+        if users[username] != password:  # Прямое сравнение паролей
+            flash('Неверный логин или пароль', 'error')
+            return render_template('login.html')
+
+        session['username'] = username
+        return redirect(url_for('welcome'))
+
+    return render_template('login.html')
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+
+        if not username or not password or not confirm_password:
+            flash('Все поля обязательны для заполнения', 'error')
+            return render_template('register.html')
+
+        if password != confirm_password:
+            flash('Пароли не совпадают', 'error')
+            return render_template('register.html')
+
+        if len(password) <= app.config['PASSWORD_MIN_LENGTH']:
+            flash(f'Пароль должен содержать более {app.config["PASSWORD_MIN_LENGTH"]} символов', 'error')
+            return render_template('register.html')
+
+        users = read_users()
+        if username in users:
+            flash('Пользователь уже существует', 'error')
+            return render_template('register.html')
+
+        try:
+            add_user(username, password)  # Сохраняем пароль как есть
+            session['username'] = username
+            return redirect(url_for('welcome'))
+        except ValueError as e:
+            flash(str(e), 'error')
+            return render_template('register.html')
+
+    return render_template('register.html')
+
+
+@app.route('/welcome')
+def welcome():
+    if 'username' not in session:
+        return redirect(url_for('login'))
+    return render_template('welcome.html', username=session['username'])
+
+
+@app.route('/logout')
+def logout():
+    session.pop('username', None)
+    return redirect(url_for('login'))
+
 
 if __name__ == '__main__':
+    # Создаем файл users.txt если его нет
+    if not os.path.exists(app.config['USERS_FILE']):
+        open(app.config['USERS_FILE'], 'w').close()
     app.run(debug=True)

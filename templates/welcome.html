@@ -5,6 +5,14 @@
     <title>Добро пожаловать</title>
 </head>
 <body>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <p style="color: {% if category == 'error' %}red{% else %}green{% endif %};">{{ message }}</p>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
     <h1>Добро пожаловать, {{ username }}!</h1>
     <a href="{{ url_for('logout') }}">Выйти</a>
 </body>
